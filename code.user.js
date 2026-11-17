@@ -1,15 +1,18 @@
 // ==UserScript==
-// @name         Steam Registerkey Enhancer
+// @name         Steam Key 批量激活 · Sub 反查
 // @namespace    https://github.com/beerleexc/Steam-Registerkey-Enhancer
 // @icon         https://raw.githubusercontent.com/beerleexc/Steam-Registerkey-Enhancer/main/assets/icon.svg
-// @version      1.1.1
+// @version      1.1.2
 // @description  批量提交 Steam Key，反查每个 Key 对应的 Sub ID 与激活失败的原因。中英双语，按页面/浏览器语言自动切换。
 // @author       beerlee
 // @license      MIT
 // @homepageURL  https://github.com/beerleexc/Steam-Registerkey-Enhancer
 // @supportURL   https://github.com/beerleexc/Steam-Registerkey-Enhancer/issues
 // @match        https://store.steampowered.com/account/registerkey*
-// @grant        none
+// @grant        GM_setValue
+// @grant        GM_getValue
+// @grant        GM_addStyle
+// @connect      store.steampowered.com
 // @run-at       document-end
 // ==/UserScript==
 
@@ -64,7 +67,7 @@
             sFail: '激活失败',
             sRun: '激活中',
             sWait: '等待激活',
-            code: { 9: '已拥有', 13: '地区限制', 14: '无效代码', 15: '重复激活', 24: '缺少本体', 50: '充值成功', 53: '次数上限' },
+            code: { 9: '已经拥有', 13: '地区限制', 14: '无效代码', 15: '重复激活', 24: '缺少本体', 50: '充值成功', 53: '次数上限' },
             loginExpired: '登录状态失效，请重新登录',
             badResponse: function (s) { return '返回内容异常(HTTP ' + s + ')'; },
             timeout: '请求超时',
@@ -282,7 +285,8 @@
                     code: it.code || 0,
                     subId: it.subId || 0,
                     name: it.name || '',
-                    time: status === 'wait' ? '' : (it.time || '')
+                    time: status === 'wait' ? '' : (it.time || ''),
+                    restored: 1
                 });
             }
             state.msg = T.restored(state.items.length);
@@ -374,10 +378,6 @@
         var subId = li ? (parseInt(li.packageid, 10) || 0) : 0;
         var name = li ? (li.line_item_description || '') : '';
 
-        if (String(data.success) === '1' || data.success === true) {
-            return { ok: true, subId: subId, name: name };
-        }
-
         var code = 0;
         if (data.purchase_result_details !== undefined && data.purchase_result_details !== null) {
             code = parseInt(data.purchase_result_details, 10) || 0;
@@ -385,11 +385,17 @@
             code = parseInt(info.result_detail, 10) || 0;
         }
 
+        if (String(data.success) === '1' || data.success === true) {
+            if (!code || code === 1) return { ok: true, subId: subId, name: name };
+        }
+
         var reason = CODE_TEXT[code];
+        var unknown = false;
         if (!reason) {
             var msg = (info && (info.error || info.message)) || data.message || data.error || '';
             msg = stripTags(msg);
             reason = msg ? msg.slice(0, 60) : T.other;
+            unknown = !msg;
         }
 
         // code 24 缺少本体：原因只写「缺少本体」，包名与本体 sub 已在行内展示
@@ -397,7 +403,13 @@
             reason = CODE_TEXT[24];
         }
 
-        return { ok: false, reason: reason, code: code, subId: subId, name: name };
+        var raw = '';
+        if (unknown) {
+            raw = JSON.stringify(data).slice(0, 400);
+            console.warn('[srk] 未识别的激活响应', data);
+        }
+
+        return { ok: false, reason: reason, code: code, subId: subId, name: name, raw: raw };
     }
 
     function countdown(sec) {
@@ -446,7 +458,7 @@
         while (state.queue.length && !state.abort) {
             var batch = state.queue.splice(0, cfg.batch);
             for (var bi = 0; bi < batch.length; bi++) {
-                setItem(batch[bi], { status: 'run', reason: '' });
+                setItem(batch[bi], { status: 'run', reason: '', restored: 0 });
             }
             renderRedeem();
 
@@ -834,7 +846,8 @@
 
     function statusBlock(it) {
         if (it.status === 'fail') {
-            return '<span class="srk-why">' + esc(it.reason || T.sFail) + '</span>';
+            return '<span class="srk-why"' + (it.raw ? ' title="' + esc(it.raw) + '"' : '') + '>' +
+                esc(it.reason || T.sFail) + '</span>';
         }
         return '<span class="srk-badge ' + badgeClass(it.status) + '">' + badgeText(it.status) + '</span>';
     }
@@ -860,16 +873,25 @@
             : '<div class="srk-recent-empty">' + esc(T.recentEmpty) + '</div>';
     }
 
-    // 底部统计行：倒计时等只改这一行，不必整表重绘
-    function statLine() {
-        var c = countStatus();
-        var total = state.items.length;
-        var withSub = 0;
-        for (var i = 0; i < total; i++) {
-            if (state.items[i].subId) withSub++;
+    // 统计行只算本次会话的 Key，历史恢复的记录只出现在「最近记录」里
+    function sessionStats() {
+        var s = { total: 0, withSub: 0, ok: 0, fail: 0, run: 0, unused: 0 };
+        for (var i = 0; i < state.items.length; i++) {
+            var it = state.items[i];
+            if (it.restored) continue;
+            s.total++;
+            if (it.subId) s.withSub++;
+            if (it.status === 'ok') s.ok++;
+            else if (it.status === 'fail') s.fail++;
+            else if (it.status === 'run') s.run++;
+            else s.unused++;
         }
+        return s;
+    }
 
-        var line = T.stat(total, withSub, c.ok, c.fail, c.run, c.unused, state.queue.length);
+    function statLine() {
+        var s = sessionStats();
+        var line = T.stat(s.total, s.withSub, s.ok, s.fail, s.run, s.unused, state.queue.length);
         return line + (state.msg ? ' · ' + state.msg : '');
     }
 
@@ -891,8 +913,9 @@
 
         var c = countStatus();
         var total = state.items.length;
-        var done = c.ok + c.fail;
-        barEl.style.width = total ? Math.round(done / total * 100) + '%' : '0%';
+        var s = sessionStats();
+        var done = s.ok + s.fail;
+        barEl.style.width = s.total ? Math.round(done / s.total * 100) + '%' : '0%';
         statEl.textContent = statLine();
 
         startBtn.disabled = state.running;
