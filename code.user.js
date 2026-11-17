@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Steam-Registerkey-Enhancer
+// @name         Steam Registerkey Enhancer
 // @namespace    https://github.com/beerleexc/Steam-Registerkey-Enhancer
 // @icon         https://raw.githubusercontent.com/beerleexc/Steam-Registerkey-Enhancer/main/assets/icon.svg
 // @version      1.1.2
