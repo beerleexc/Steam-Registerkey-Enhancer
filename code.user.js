@@ -1,16 +1,15 @@
 // ==UserScript==
-// @name         Steam Registerkey Enhancer
-// @namespace    Steam Registerkey Enhancer
-// @icon         https://raw.githubusercontent.com/beerleexc/Steam-Registerkey-Enhancer/refs/heads/main/assets/icon.svg
-// @license      MIT
-// @version      1.1.0
-// @description  批量提交 Steam Key，查询每个 Key 对应的 Sub ID，导出激活记录。Submit Steam Key in bulk, query the Sub ID corresponding to each Key, and export the activation records.
+// @name         Steam Key 批量激活 · Sub 反查
+// @namespace    https://github.com/beerleexc/Steam-Registerkey-Enhancer
+// @icon         https://raw.githubusercontent.com/beerleexc/Steam-Registerkey-Enhancer/main/assets/icon.svg
+// @version      1.1.1
+// @description  批量提交 Steam Key，反查每个 Key 对应的 Sub ID 与激活失败的原因。中英双语，按页面/浏览器语言自动切换。
 // @author       beerlee
+// @license      MIT
+// @homepageURL  https://github.com/beerleexc/Steam-Registerkey-Enhancer
+// @supportURL   https://github.com/beerleexc/Steam-Registerkey-Enhancer/issues
 // @match        https://store.steampowered.com/account/registerkey*
-// @grant        GM_setValue
-// @grant        GM_getValue
-// @grant        GM_addStyle
-// @connect      store.steampowered.com
+// @grant        none
 // @run-at       document-end
 // ==/UserScript==
 
@@ -441,6 +440,7 @@
         state.abort = false;
         state.msg = '';
         if (keys && keys.length) state.queue = keys.slice();
+        setRecentOpen(true);
         renderRedeem();
 
         while (state.queue.length && !state.abort) {
@@ -873,6 +873,12 @@
         return line + (state.msg ? ' · ' + state.msg : '');
     }
 
+    function setRecentOpen(open) {
+        state.recentOpen = open;
+        caretEl.textContent = open ? '\u25B4' : '\u25BE';
+        recentBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+
     function renderRedeem() {
         if (state.recentOpen) {
             var scrollTop = listEl.scrollTop;
@@ -918,9 +924,7 @@
 
         recentBtn.addEventListener('click', function (e) {
             e.preventDefault();
-            state.recentOpen = !state.recentOpen;
-            caretEl.textContent = state.recentOpen ? '\u25B4' : '\u25BE';
-            recentBtn.setAttribute('aria-expanded', state.recentOpen ? 'true' : 'false');
+            setRecentOpen(!state.recentOpen);
             renderRedeem();
         });
 
