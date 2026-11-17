@@ -1,11 +1,16 @@
 // ==UserScript==
-// @name         Seam Registerkey Enhancer
-// @namespace    Seam Registerkey Enhancer
-// @version      1.0.0
-// @description  批量提交 Steam Key，反查每个 Key 对应的 Sub ID 与激活失败的原因。
+// @name         Steam Registerkey Enhancer
+// @namespace    Steam Registerkey Enhancer
+// @icon         https://raw.githubusercontent.com/beerleexc/Steam-Registerkey-Enhancer/refs/heads/main/assets/icon.svg
+// @license      MIT
+// @version      1.1.0
+// @description  批量提交 Steam Key，查询每个 Key 对应的 Sub ID，导出激活记录。Submit Steam Key in bulk, query the Sub ID corresponding to each Key, and export the activation records.
 // @author       beerlee
 // @match        https://store.steampowered.com/account/registerkey*
-// @grant        none
+// @grant        GM_setValue
+// @grant        GM_getValue
+// @grant        GM_addStyle
+// @connect      store.steampowered.com
 // @run-at       document-end
 // ==/UserScript==
 
@@ -24,16 +29,140 @@
 
     var DEF_CFG = { batch: 9, wait: 20, timeout: 20 };
 
-    // purchase_result_details 对照表
-    var CODE_TEXT = {
-        9: '已拥有',
-        13: '地区限制',
-        14: '无效代码',
-        15: '重复激活',
-        24: '缺少本体',
-        50: '充值成功',
-        53: '次数上限'
+    // 语言：简中/繁中 → 中文，其他任何语言 → 英文，取不到语言时默认中文
+    function detectLang() {
+        var cands = [];
+        var m = location.search.match(/[?&]l=([a-zA-Z-]+)/);
+        if (m) cands.push(m[1]);
+        if (document.documentElement && document.documentElement.lang) {
+            cands.push(document.documentElement.lang);
+        }
+        if (navigator.language) cands.push(navigator.language);
+
+        for (var i = 0; i < cands.length; i++) {
+            var s = String(cands[i] || '').toLowerCase();
+            if (!s) continue;
+            if (s.indexOf('zh') === 0 || s.indexOf('schinese') === 0 || s.indexOf('tchinese') === 0) return 'zh';
+            return 'en';
+        }
+        return 'zh';
+    }
+
+    var I18N = {
+        zh: {
+            title: '输入产品代码，在 Steam 上激活您的产品。',
+            ph: '支持批量激活、文字复制，可自动识别cdk\n默认分批9个、间隔20秒；每小时上限50次\n超限或连续错误10次暂停激活，请30分钟后重试',
+            start: '开始激活',
+            cont: '继续激活',
+            stop: '停止',
+            csvBtn: '导出CSV',
+            jsonBtn: '导出JSON',
+            txtBtn: '复制纯文本',
+            unusedBtn: '复制未使用',
+            clearBtn: '清空记录',
+            ready: '准备就绪',
+            sOk: '激活成功',
+            sFail: '激活失败',
+            sRun: '激活中',
+            sWait: '等待激活',
+            code: { 9: '已拥有', 13: '地区限制', 14: '无效代码', 15: '重复激活', 24: '缺少本体', 50: '充值成功', 53: '次数上限' },
+            loginExpired: '登录状态失效，请重新登录',
+            badResponse: function (s) { return '返回内容异常(HTTP ' + s + ')'; },
+            timeout: '请求超时',
+            network: '网络错误',
+            other: '其他错误',
+            unfinished: '上次未完成',
+            restored: function (n) { return '已恢复上次的 ' + n + ' 条记录'; },
+            waiting: function (l) { return '等待 ' + l + ' 秒后继续'; },
+            noSession: '未获取到 sessionid，请确认当前页面已登录 Steam 商店',
+            limit: function (n) { return '触发 Steam「次数上限」。建议等待约 1 小时后再点「继续激活」。剩余 ' + n + ' 个未处理。'; },
+            stopped: function (n) { return '已停止，剩余 ' + n + ' 个未处理，可点「继续激活」恢复。'; },
+            done: '全部处理完毕',
+            stopping: '正在停止…',
+            parsedNone: '没有解析到有效 Key（形如 XXXXX-XXXXX-XXXXX）',
+            exported: function (fmt, saved) { return (saved ? '已导出 ' : '已复制 ') + fmt; },
+            copiedPlain: function () { return '已复制纯文本'; },
+            copiedUnused: function (n) { return '已复制 ' + n + ' 个未使用 Key'; },
+            csvHeader: ['游戏名', 'Key', '状态', '激活时间', 'subId', '原因'],
+            txtTitle: 'Steam Key 记录',
+            recent: '最近记录',
+            recentEmpty: '暂无激活记录',
+            txtSummary: function (total, ok, fail, unused, run) {
+                return '共 ' + total + ' 个 · 激活成功 ' + ok + ' · 激活失败 ' + fail +
+                    ' · 等待激活 ' + unused + (run ? ' · 进行中 ' + run : '');
+            },
+            stat: function (total, withSub, ok, fail, run, unused, queue) {
+                return '共 ' + total + ' 个 · 查到 SUB ' + withSub + ' 个 · 激活成功 ' + ok +
+                    ' · 激活失败 ' + fail + (run ? ' · 进行中 ' + run : '') +
+                    (unused ? ' · 等待激活 ' + unused : '') +
+                    (queue ? ' · 队列 ' + queue : '');
+            },
+            chipTitle: '在 SteamDB 查看 sub ',
+            chipBaseTitle: '需要先激活的本体 sub ',
+            basePrefix: '本体 '
+        },
+        en: {
+            title: 'Enter your product code to activate it on Steam.',
+            ph: 'Batch activation and paste-to-detect supported\nBatch of 9 per run, 20s interval; 50 activations per hour\nOver the limit or 10 errors in a row: paused for 30 min',
+            start: 'Activate',
+            cont: 'Continue',
+            stop: 'Stop',
+            csvBtn: 'Export CSV',
+            jsonBtn: 'Export JSON',
+            txtBtn: 'Copy text',
+            unusedBtn: 'Copy unused',
+            clearBtn: 'Clear',
+            ready: 'Ready',
+            sOk: 'Activated',
+            sFail: 'Failed',
+            sRun: 'Running',
+            sWait: 'Pending',
+            code: {
+                9: 'Already owned', 13: 'Region restricted', 14: 'Invalid code',
+                15: 'Duplicate activation', 24: 'Base game required',
+                50: 'Wallet top-up', 53: 'Too many attempts'
+            },
+            loginExpired: 'Session expired, please sign in again',
+            badResponse: function (s) { return 'Unexpected response (HTTP ' + s + ')'; },
+            timeout: 'Request timed out',
+            network: 'Network error',
+            other: 'Unknown error',
+            unfinished: 'Interrupted last time',
+            restored: function (n) { return 'Restored ' + n + ' record(s) from the last run'; },
+            waiting: function (l) { return 'Waiting ' + l + 's before next batch'; },
+            noSession: 'sessionid not found. Make sure you are signed in to the Steam Store.',
+            limit: function (n) { return 'Steam rate limit hit. Wait about 1 hour, then click Continue. ' + n + ' key(s) left.'; },
+            stopped: function (n) { return 'Stopped. ' + n + ' key(s) left; click Continue to resume.'; },
+            done: 'All done',
+            stopping: 'Stopping…',
+            parsedNone: 'No valid key found (format XXXXX-XXXXX-XXXXX)',
+            exported: function (fmt, saved) { return (saved ? 'Exported ' : 'Copied ') + fmt; },
+            copiedPlain: function () { return 'Copied plain text'; },
+            copiedUnused: function (n) { return 'Copied ' + n + ' unused key(s)'; },
+            csvHeader: ['Game', 'Key', 'Status', 'Activated at', 'subId', 'Reason'],
+            txtTitle: 'Steam Key Report',
+            recent: 'Recent',
+            recentEmpty: 'No activation records yet',
+            txtSummary: function (total, ok, fail, unused, run) {
+                return 'Total ' + total + ' · activated ' + ok + ' · failed ' + fail +
+                    ' · pending ' + unused + (run ? ' · running ' + run : '');
+            },
+            stat: function (total, withSub, ok, fail, run, unused, queue) {
+                return total + ' keys · SUB found ' + withSub + ' · activated ' + ok +
+                    ' · failed ' + fail + (run ? ' · running ' + run : '') +
+                    (unused ? ' · pending ' + unused : '') +
+                    (queue ? ' · queue ' + queue : '');
+            },
+            chipTitle: 'View sub ',
+            chipBaseTitle: 'Base sub required: ',
+            basePrefix: 'Base '
+        }
     };
+
+    var T = I18N[detectLang()];
+
+    // purchase_result_details 对照表
+    var CODE_TEXT = T.code;
 
     /* ================= 小工具 ================= */
 
@@ -61,8 +190,7 @@
         return cleanText(String(s == null ? '' : s).replace(/<[^>]*>/g, ' '));
     }
 
-    // 从任意文字里抽取 Key：支持 XXXXX-XXXXX-XXXXX / 无横线 / 5 段老 Key
-    // 全篇扫描而不是逐行取第一个，一行里塞多个 Key 也不会漏
+    // 支持 XXXXX-XXXXX-XXXXX / 无横线 / 5 段老 Key，全篇扫描（一行多个也不漏）
     function parseKeys(text) {
         var out = [], seen = {};
         var src = String(text || '').toUpperCase();
@@ -70,9 +198,8 @@
         var m;
         while ((m = re.exec(src))) {
             var raw = m[0].replace(/-/g, '');
-            if (raw.length % 5 !== 0) continue;
             var groups = raw.match(/.{5}/g) || [];
-            if (groups.length < 3 || groups.length > 5) continue;
+            if (groups.length < 3) continue;
             var key = groups.join('-');
             if (seen[key]) continue;
             seen[key] = 1;
@@ -107,6 +234,7 @@
         queue: [],
         running: false,
         abort: false,
+        recentOpen: false,
         msg: ''
     };
 
@@ -144,10 +272,10 @@
                 if (it.status === 'ok' || it.status === 'fail') {
                     status = it.status;
                     reason = it.reason || '';
-                    if ((it.code || 0) === 24) reason = '缺少本体';
+                    if ((it.code || 0) === 24) reason = CODE_TEXT[24];
                 } else if (it.status === 'run') {
                     status = 'fail';
-                    reason = '上次未完成';
+                    reason = T.unfinished;
                 }
                 setItem(it.key, {
                     status: status,
@@ -158,7 +286,7 @@
                     time: status === 'wait' ? '' : (it.time || '')
                 });
             }
-            state.msg = '已恢复上次的 ' + state.items.length + ' 条记录';
+            state.msg = T.restored(state.items.length);
         } catch (e) {}
     }
 
@@ -216,37 +344,27 @@
         });
     }
 
-    // 用 Steam 页面自带的原生弹窗；页面没提供时退回状态栏提示
-    function nativeAlert(title, html) {
-        if (typeof window.ShowAlertDialog === 'function') {
-            window.ShowAlertDialog(title, html);
-            return;
-        }
-        state.msg = stripTags(html);
-        renderRedeem();
-    }
-
     /* ================= 激活逻辑 ================= */
 
     function redeemKey(key) {
         return postForm(URL_REDEEM, { product_key: key, sessionid: state.sid }, cfg.timeout)
             .then(function (res) {
                 if (res.status === 401 || res.status === 403) {
-                    return { ok: false, reason: '登录状态失效，请重新登录' };
+                    return { ok: false, reason: T.loginExpired };
                 }
                 var data = null;
                 try { data = JSON.parse(res.text); } catch (e) { data = null; }
                 if (!data) {
-                    return { ok: false, reason: '返回内容异常(HTTP ' + res.status + ')' };
+                    return { ok: false, reason: T.badResponse(res.status) };
                 }
                 return readRedeemResult(data);
             })
             .catch(function (err) {
                 var name = err && err.name ? err.name : '';
                 if (name === 'AbortError' || String(err).toLowerCase().indexOf('abort') >= 0) {
-                    return { ok: false, reason: '请求超时' };
+                    return { ok: false, reason: T.timeout };
                 }
-                return { ok: false, reason: '网络错误' };
+                return { ok: false, reason: T.network };
             });
     }
 
@@ -272,15 +390,14 @@
         if (!reason) {
             var msg = (info && (info.error || info.message)) || data.message || data.error || '';
             msg = stripTags(msg);
-            reason = msg ? msg.slice(0, 60) : '其他错误';
+            reason = msg ? msg.slice(0, 60) : T.other;
         }
 
         // code 24 缺少本体：原因只写「缺少本体」，包名与本体 sub 已在行内展示
         if (code === 24) {
-            reason = '缺少本体';
+            reason = CODE_TEXT[24];
         }
 
-        // 同 FOD：line_items[0] 存在才体现 sub（地区限制等没有 line_items，sub 为 0）
         return { ok: false, reason: reason, code: code, subId: subId, name: name };
     }
 
@@ -290,9 +407,7 @@
             if (!left) { resolve(); return; }
 
             function tick() {
-                state.msg = left > 0
-                    ? '等待 ' + left + ' 秒后继续（剩余 ' + state.queue.length + ' 个）'
-                    : '';
+                state.msg = left > 0 ? T.waiting(left) : '';
                 statEl.textContent = statLine();
             }
 
@@ -317,7 +432,7 @@
 
         state.sid = getSessionId();
         if (!state.sid) {
-            state.msg = '未获取到 sessionid，请确认当前页面已登录 Steam 商店';
+            state.msg = T.noSession;
             renderRedeem();
             return;
         }
@@ -367,8 +482,7 @@
             renderRedeem();
 
             if (limitHit) {
-                state.msg = '触发 Steam「次数上限」。建议等待约 1 小时后再点「继续激活」。剩余 ' +
-                    state.queue.length + ' 个未处理。';
+                state.msg = T.limit(state.queue.length);
                 break;
             }
 
@@ -380,9 +494,9 @@
         state.running = false;
 
         if (state.abort) {
-            state.msg = '已停止，剩余 ' + state.queue.length + ' 个未处理，可点「继续激活」恢复。';
+            state.msg = T.stopped(state.queue.length);
         } else if (!state.queue.length && !limitHit) {
-            state.msg = '全部处理完毕';
+            state.msg = T.done;
         }
         renderRedeem();
     }
@@ -413,7 +527,6 @@
 
     /* ================= 导出 ================= */
 
-    // CSV 字段转义：含逗号/引号/换行时用双引号包裹，内部引号双写
     function csvCell(v) {
         var s = String(v == null ? '' : v);
         if (/[",\r\n]/.test(s)) {
@@ -423,7 +536,7 @@
     }
 
     function buildCSV() {
-        var header = ['游戏名', 'Key', '状态', '激活时间', 'subId', '原因'];
+        var header = T.csvHeader;
         var rows = [header.map(csvCell).join(',')];
         for (var i = 0; i < state.items.length; i++) {
             var it = state.items[i];
@@ -453,7 +566,6 @@
                 time: it.time || '',
                 subId: it.subId || 0
             };
-            // 激活成功不携带失败原因字段
             if (it.status !== 'ok') o.reason = it.reason || '';
             arr.push(o);
         }
@@ -480,13 +592,11 @@
             p(d.getHours()) + ':' + p(d.getMinutes());
     }
 
-    // 纯文本：一行一个 Key，制表符分隔，直接粘贴到聊天/表格都不会带格式
     function buildTXT() {
         var c = countStatus();
         var lines = [];
-        lines.push('Steam Key 记录  ' + stampText());
-        lines.push('共 ' + state.items.length + ' 个 · 激活成功 ' + c.ok + ' · 激活失败 ' + c.fail +
-            ' · 等待激活 ' + c.unused + (c.run ? ' · 进行中 ' + c.run : ''));
+        lines.push(T.txtTitle + '  ' + stampText());
+        lines.push(T.txtSummary(state.items.length, c.ok, c.fail, c.unused, c.run));
         lines.push('');
         for (var i = 0; i < state.items.length; i++) {
             var it = state.items[i];
@@ -499,12 +609,11 @@
         return lines.join('\n');
     }
 
-    // 文件名时间戳：2026-11-17-13-40
     function fileStamp() {
         return stampText().replace(/[: ]/g, '-');
     }
 
-    // 导出为文件下载；环境不支持 Blob/download 时返回 false，由调用方退回复制
+    // 不支持 Blob/download 时返回 false，由调用方退回复制
     function downloadFile(name, text, mime) {
         var a = document.createElement('a');
         if (!('download' in a) || typeof Blob === 'undefined' || typeof URL === 'undefined' ||
@@ -539,7 +648,6 @@
         'flex-wrap:wrap;row-gap:6px;padding:13px 14px 5px;border-bottom:1px solid var(--srk-line)}',
         '#srk-root .srk-logo{font-size:17px;font-weight:400;color:#fff;line-height:1.35}',
         '#srk-root .srk-body{padding:10px 14px 14px}',
-        // 输入框容器：输入区 + 结果列表在同一个框内，key 多时列表内部滚动
         '#srk-root .srk-inputbox{border-radius:3px;border:1px solid transparent;',
         'background:rgba(0,0,0,.4);padding:7px 9px}',
         '#srk-root .srk-inputbox:focus-within{border-color:var(--srk-acc)}',
@@ -549,11 +657,9 @@
         '-webkit-appearance:none;appearance:none}',
         '#srk-root .srk-list{margin-top:10px;border-radius:2px;background:rgba(0,0,0,.2);',
         'max-height:48vh;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}',
-        '#srk-root .srk-list:empty{display:none}',
-        // 按钮用等宽网格：每格 1fr，宽度不够时换行，不强求与输入框右对齐
+        '#srk-root .srk-list.srk-hide{display:none}',
         '#srk-root .srk-actions{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:8px 0 0}',
         '#srk-root .srk-actions .srk-btn{width:100%;min-width:0}',
-        // 操作按钮统一用 Steam 兑换钱包码页的绿色按钮样式（btnv6_green_hoverfade）
         '#srk-root .srk-btn{display:inline-flex;align-items:center;justify-content:center;min-height:32px;',
         'padding:0 8px;border-radius:2px;border:0;color:#fff;',
         'background:#75b022;background-image:linear-gradient(to right,#75b022 0%,#588a1b 60%);',
@@ -583,7 +689,6 @@
         '#srk-root .srk-badge.srk-wait{color:var(--srk-dim)}',
         '#srk-root .srk-why{flex:0 0 auto;max-width:45%;overflow:hidden;',
         'text-overflow:ellipsis;font-size:11.5px;line-height:1.5;color:#ff8a70;background:none;white-space:nowrap}',
-        // 481px 以上按桌面规则：游戏名靠右，间距随窗口宽度自适应
         '#srk-root .srk-sub-name{flex:0 10 auto;max-width:150px;min-width:0;margin-left:auto;font-size:12px;',
         'color:var(--srk-txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-decoration:none}',
         '#srk-root .srk-sub-chip{flex:0 0 auto;display:inline-flex;align-items:center;min-height:24px;',
@@ -591,14 +696,17 @@
         'border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.06);color:#6fb3e0;',
         'font-family:inherit;font-weight:700;cursor:pointer;text-decoration:none;white-space:nowrap}',
         '#srk-root .srk-db-ico{width:10px;height:10px;margin-left:5px;flex:0 0 auto;opacity:.85}',
-        '#srk-root a.srk-sub-chip:hover{color:#fff;border-color:rgba(103,193,245,.55);',
+        '#srk-root a.srk-sub-chip:hover,#srk-root button.srk-sub-chip:hover{color:#fff;border-color:rgba(103,193,245,.55);',
         'background:rgba(103,193,245,.18)}',
-        '#srk-root a.srk-sub-chip:active{background:rgba(103,193,245,.3)}',
+        '#srk-root a.srk-sub-chip:active,#srk-root button.srk-sub-chip:active{background:rgba(103,193,245,.3)}',
+        '#srk-root .srk-recent-btn{flex:0 0 auto;cursor:pointer;font-family:inherit;',
+        '-webkit-appearance:none;appearance:none}',
+        '#srk-root .srk-caret{margin-left:5px;font-size:10px;line-height:1;opacity:.8}',
+        '#srk-root .srk-recent-empty{padding:9px 12px;font-size:12px;color:var(--srk-dim)}',
         // 嵌进 Steam 原生激活卡片时不再画第二层卡片
         '#srk-root.srk-embed{background:none;border-radius:0;margin:0;overflow:visible}',
         '@media (max-width:480px){',
         '#srk-root .srk-actions{grid-template-columns:repeat(2,1fr)}',
-        // 窄屏只压缩字号 / 内边距，行内间距交给 flex 自动收缩
         '#srk-root .srk-row{padding:7px 7px;gap:3px}',
         '#srk-root .srk-idx{min-width:13px;font-size:11px}',
         '#srk-root .srk-key{font-size:12px}',
@@ -608,12 +716,11 @@
         '#srk-root .srk-sub-name{flex:1 1 0%;margin-left:0;max-width:none;font-size:11.5px}',
         '#srk-root .srk-sub-chip{min-height:22px;padding:0 6px;font-size:11px}',
         '}',
-        // 超窄屏（iPhone SE）：去掉序号换空间，避免状态被省略号截断
+        // 超窄屏：去掉序号换空间
         '@media (max-width:360px){',
         '#srk-root .srk-idx{display:none}',
         '#srk-root .srk-row{padding:7px 8px;gap:3px}',
         '}',
-        // 桌面 / 平板（>480px）：整套桌面规则，与移动端只有两个状态
         '@media (min-width:481px){',
         '#srk-root .srk-hd{padding:16px 18px 6px}',
         '#srk-root .srk-logo{font-size:19px}',
@@ -630,7 +737,6 @@
         '#srk-root .srk-sub-name{font-size:12px;max-width:170px}',
         '#srk-root .srk-sub-chip{min-height:26px;font-size:12px;padding:0 10px}',
         '}',
-        // 宽屏：7 个按钮等宽一行
         '@media (min-width:720px){',
         '#srk-root .srk-actions{grid-template-columns:repeat(7,1fr)}',
         '}'
@@ -640,26 +746,29 @@
 
     var HTML = [
         '<div class="srk-hd">',
-        '  <div><span class="srk-logo">输入产品代码，在 Steam 上激活您的产品。</span></div>',
+        '  <div><span class="srk-logo">' + esc(T.title) + '</span></div>',
+        '  <button type="button" id="srk-recent-btn" class="srk-sub-chip srk-recent-btn"',
+        '    aria-expanded="false" aria-controls="srk-list">' + esc(T.recent) +
+        '<span class="srk-caret" id="srk-caret">&#9662;</span></button>',
         '</div>',
         '<div class="srk-body">',
         '  <div>',
         '    <div class="srk-inputbox">',
         '      <textarea id="srk-keys" rows="4" spellcheck="false" autocapitalize="characters"',
-        '        placeholder="支持批量激活，粘贴整段文字自动提取Key&#10;超9个自动分批（间隔20秒）；触发激活次数上限后请30分钟后重试"></textarea>',
+        '        placeholder="' + T.ph + '"></textarea>',
         '    </div>',
         '    <div class="srk-list" id="srk-list"></div>',
         '    <div class="srk-actions">',
-        '      <button type="button" class="srk-btn" id="srk-start">开始激活</button>',
-        '      <button type="button" class="srk-btn" id="srk-stop" disabled>停止</button>',
-        '      <button type="button" class="srk-btn" id="srk-csv" disabled>导出CSV</button>',
-        '      <button type="button" class="srk-btn" id="srk-json" disabled>导出JSON</button>',
-        '      <button type="button" class="srk-btn" id="srk-txt" disabled>复制纯文本</button>',
-        '      <button type="button" class="srk-btn" id="srk-unused" disabled>复制未使用</button>',
-        '      <button type="button" class="srk-btn" id="srk-clear">清空记录</button>',
+        '      <button type="button" class="srk-btn" id="srk-start">' + esc(T.start) + '</button>',
+        '      <button type="button" class="srk-btn" id="srk-stop" disabled>' + esc(T.stop) + '</button>',
+        '      <button type="button" class="srk-btn" id="srk-csv" disabled>' + esc(T.csvBtn) + '</button>',
+        '      <button type="button" class="srk-btn" id="srk-json" disabled>' + esc(T.jsonBtn) + '</button>',
+        '      <button type="button" class="srk-btn" id="srk-txt" disabled>' + esc(T.txtBtn) + '</button>',
+        '      <button type="button" class="srk-btn" id="srk-unused" disabled>' + esc(T.unusedBtn) + '</button>',
+        '      <button type="button" class="srk-btn" id="srk-clear">' + esc(T.clearBtn) + '</button>',
         '    </div>',
         '    <div class="srk-prog"><div class="srk-bar"><i id="srk-bar"></i></div>',
-        '      <div class="srk-stat" id="srk-stat">准备就绪</div></div>',
+        '      <div class="srk-stat" id="srk-stat">' + esc(T.ready) + '</div></div>',
         '  </div>',
         '</div>'
     ].join('\n');
@@ -673,10 +782,11 @@
     styleEl.textContent = CSS;
 
     var keysInput, startBtn, stopBtn, csvBtn, jsonBtn, txtBtn, unusedBtn, clearBtn, statEl, barEl, listEl;
+    var recentBtn, caretEl;
 
     /* ================= 渲染 ================= */
 
-    var STATUS_TEXT = { ok: '激活成功', fail: '激活失败', run: '激活中', wait: '等待激活' };
+    var STATUS_TEXT = { ok: T.sOk, fail: T.sFail, run: T.sRun, wait: T.sWait };
 
     function badgeText(status) {
         return STATUS_TEXT[status] || STATUS_TEXT.wait;
@@ -686,7 +796,6 @@
         return 'srk-' + (STATUS_TEXT[status] ? status : 'wait');
     }
 
-    // 游戏名：取自 Steam 返回的 line_item_description
     function nameText(it) {
         if (!it.name) return '';
         return '<span class="srk-sub-name" title="' + esc(it.name) + '">' + esc(it.name) + '</span>';
@@ -719,16 +828,36 @@
         var url = 'https://steamdb.info/sub/' + id + '/';
         return '<a class="srk-sub-chip" href="' + esc(url) + '"' +
             ' target="_blank" rel="noopener noreferrer" title="' +
-            (isBase ? '需要先激活的本体 sub ' : '在 SteamDB 查看 sub ') + id + '">' +
-            (isBase ? '本体 ' : '') + id + STEAMDB_ICON + '</a>';
+            esc(isBase ? T.chipBaseTitle + id : T.chipTitle + id) + '">' +
+            (isBase ? esc(T.basePrefix) : '') + id + STEAMDB_ICON + '</a>';
     }
 
-    // 失败只显示原因（红字）；其余状态显示标签
     function statusBlock(it) {
         if (it.status === 'fail') {
-            return '<span class="srk-why">' + esc(it.reason || '激活失败') + '</span>';
+            return '<span class="srk-why">' + esc(it.reason || T.sFail) + '</span>';
         }
         return '<span class="srk-badge ' + badgeClass(it.status) + '">' + badgeText(it.status) + '</span>';
+    }
+
+    function recentHtml() {
+        var html = [], n = 0;
+        for (var i = state.items.length - 1; i >= 0 && n < 20; i--) {
+            var it = state.items[i];
+            if (it.status === 'wait') continue;
+            n++;
+            html.push(
+                '<div class="srk-row">' +
+                '<span class="srk-idx">' + n + '</span>' +
+                '<code class="srk-key">' + esc(it.key) + '</code>' +
+                statusBlock(it) +
+                nameText(it) +
+                subChip(it) +
+                '</div>'
+            );
+        }
+        return html.length
+            ? html.join('')
+            : '<div class="srk-recent-empty">' + esc(T.recentEmpty) + '</div>';
     }
 
     // 底部统计行：倒计时等只改这一行，不必整表重绘
@@ -740,31 +869,19 @@
             if (state.items[i].subId) withSub++;
         }
 
-        var line = '共 ' + total + ' 个 · 查到 SUB ' + withSub + ' 个 · 激活成功 ' + c.ok + ' · 激活失败 ' + c.fail;
-        if (c.run) line += ' · 进行中 ' + c.run;
-        if (c.unused) line += ' · 等待激活 ' + c.unused;
-        if (state.queue.length) line += ' · 队列 ' + state.queue.length;
+        var line = T.stat(total, withSub, c.ok, c.fail, c.run, c.unused, state.queue.length);
         return line + (state.msg ? ' · ' + state.msg : '');
     }
 
     function renderRedeem() {
-        var html = [];
-        for (var i = 0; i < state.items.length; i++) {
-            var it = state.items[i];
-            html.push(
-                '<div class="srk-row">' +
-                '<span class="srk-idx">' + (i + 1) + '</span>' +
-                '<code class="srk-key">' + esc(it.key) + '</code>' +
-                statusBlock(it) +
-                nameText(it) +
-                subChip(it) +
-                '</div>'
-            );
+        if (state.recentOpen) {
+            var scrollTop = listEl.scrollTop;
+            listEl.innerHTML = recentHtml();
+            listEl.scrollTop = scrollTop;
+            listEl.classList.remove('srk-hide');
+        } else {
+            listEl.classList.add('srk-hide');
         }
-
-        var scrollTop = listEl.scrollTop;
-        listEl.innerHTML = html.join('');
-        listEl.scrollTop = scrollTop;
 
         var c = countStatus();
         var total = state.items.length;
@@ -779,7 +896,7 @@
         txtBtn.disabled = total === 0;
         unusedBtn.disabled = total === 0 || c.unused === 0;
         clearBtn.disabled = state.running || total === 0;
-        startBtn.textContent = (!state.running && state.queue.length) ? '继续激活' : '开始激活';
+        startBtn.textContent = (!state.running && state.queue.length) ? T.cont : T.start;
     }
 
     /* ================= 绑定 ================= */
@@ -796,6 +913,16 @@
         statEl = document.getElementById('srk-stat');
         barEl = document.getElementById('srk-bar');
         listEl = document.getElementById('srk-list');
+        recentBtn = document.getElementById('srk-recent-btn');
+        caretEl = document.getElementById('srk-caret');
+
+        recentBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            state.recentOpen = !state.recentOpen;
+            caretEl.textContent = state.recentOpen ? '\u25B4' : '\u25BE';
+            recentBtn.setAttribute('aria-expanded', state.recentOpen ? 'true' : 'false');
+            renderRedeem();
+        });
 
         startBtn.addEventListener('click', function () {
             if (state.running) return;
@@ -804,14 +931,13 @@
                 return;
             }
             var keys = parseKeys(keysInput.value);
-            // 输入框是空的但上次记录里还有「等待激活」，直接续跑这些 Key
             if (!keys.length) {
                 for (var i = 0; i < state.items.length; i++) {
                     if (state.items[i].status === 'wait') keys.push(state.items[i].key);
                 }
             }
             if (!keys.length) {
-                state.msg = '没有解析到有效 Key（形如 XXXXX-XXXXX-XXXXX）';
+                state.msg = T.parsedNone;
                 renderRedeem();
                 return;
             }
@@ -820,7 +946,7 @@
 
         stopBtn.addEventListener('click', function () {
             state.abort = true;
-            state.msg = '正在停止…';
+            state.msg = T.stopping;
             renderRedeem();
         });
 
@@ -829,7 +955,7 @@
             var text = buildCSV();
             var saved = downloadFile('steam-keys-' + fileStamp() + '.csv', text, 'text/csv;charset=utf-8');
             if (!saved) copyText(text);
-            state.msg = (saved ? '已导出 CSV' : '已复制 CSV') + '（' + state.items.length + ' 行）';
+            state.msg = T.exported('CSV', saved);
             renderRedeem();
         });
 
@@ -838,14 +964,14 @@
             var text = buildJSON();
             var saved = downloadFile('steam-keys-' + fileStamp() + '.json', text, 'application/json;charset=utf-8');
             if (!saved) copyText(text);
-            state.msg = (saved ? '已导出 JSON' : '已复制 JSON') + '（' + state.items.length + ' 条）';
+            state.msg = T.exported('JSON', saved);
             renderRedeem();
         });
 
         txtBtn.addEventListener('click', function () {
             if (!state.items.length) return;
             copyText(buildTXT());
-            state.msg = '已复制纯文本（' + state.items.length + ' 行，含等待激活标注）';
+            state.msg = T.copiedPlain();
             renderRedeem();
         });
 
@@ -856,7 +982,7 @@
             }
             if (!keys.length) return;
             copyText(keys.join('\n'));
-            state.msg = '已复制 ' + keys.length + ' 个未使用 Key';
+            state.msg = T.copiedUnused(keys.length);
             renderRedeem();
         });
 
@@ -877,7 +1003,7 @@
     function injectStyle() {
         var head = document.head || document.documentElement;
         if (!head) return;
-        if (!document.getElementById('srk-style')) head.appendChild(styleEl);
+        head.appendChild(styleEl);
     }
 
     function tryMount() {
@@ -894,7 +1020,6 @@
             form.style.display = '';
         } else if (examples && examples.parentNode) {
             examples.parentNode.insertBefore(root, examples);
-            examples.style.display = 'none';
         } else {
             var host = (main && main.querySelector('.leftcol')) || main || document.body;
             host.insertBefore(root, host.firstChild);
