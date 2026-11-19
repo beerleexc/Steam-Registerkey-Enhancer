@@ -100,8 +100,8 @@
 **喜欢的话就点个⭐Star 吧(°∀°)ﾉ**
 **或者也可以考虑捐助支持一下哦(｀・ω・´)**
 <p align="center">
-<img src="https://github.com/beerleexc/Steam-Wishlist-Enhancer/blob/main/assets/WeChat.JPG" width="48%">
-<img src="https://github.com/beerleexc/Steam-Wishlist-Enhancer/blob/main/assets/AliPay.PNG" width="48%">
+<img src="https://raw.githubusercontent.com/beerleexc/Steam-Wishlist-Enhancer/main/assets/WeChat.JPG" width="48%">
+<img src="https://raw.githubusercontent.com/beerleexc/Steam-Wishlist-Enhancer/main/assets/AliPay.PNG" width="48%">
 </p>
 
 
