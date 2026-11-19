@@ -51,6 +51,7 @@ For bugs and feature suggestions please open [**Issues**](https://github.com/bee
 > * This script only calls official Steam APIs. It never uploads your keys, login credentials or personal data to any third‑party server. All activation records and runtime cache are stored locally in browser localStorage.
 > * Clearing browser cache, uninstalling the script or using incognito mode will erase all records. Please export and back‑up important data in advance.
 > * Steam enforces strict rate limits for key activation. Too many activations will trigger a maximum‑attempt error.
+
 # ⚠️ Disclaimer
 This script is intended for personal use only, to batch‑activate product keys you legally own.
 According to the Steam Subscriber Agreement, automated script interaction is restricted. Do not use it for key resale, high‑frequency activation attempts or trying keys of unknown origin.
@@ -74,8 +75,8 @@ If you like this project please give it a ⭐Star (°∀°)ﾉ
 You may also consider a donation (｀・ω・´)
 
 <p align="center">
-<img src="https://raw.githubusercontent.com/beerleexc/Steam‑Wishlist‑Enhancer/main/assets/WeChat.JPG" width="48%">
-<img src="https://raw.githubusercontent.com/beerleexc/Steam‑Wishlist‑Enhancer/main/assets/AliPay.PNG" width="48%">
+<img src="https://raw.githubusercontent.com/beerleexc/Steam-Wishlist-Enhancer/main/assets/WeChat.JPG" width="48%">
+<img src="https://raw.githubusercontent.com/beerleexc/Steam-Wishlist-Enhancer/main/assets/AliPay.PNG" width="48%">
 </p>
 
 Author: **beerlee**  
