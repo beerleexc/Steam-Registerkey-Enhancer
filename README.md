@@ -9,7 +9,7 @@
 <div align="center">
 
 <a href="https://github.com/beerleexc"><img src="https://img.shields.io/badge/Author-beerleexc-blue.svg"></a>
-<a href="https://github.com/beerleexc/Steam-Registerkey-Enhancer/releases"><img src="https://img.shields.io/github/v/release/beerleexc/Steam-Wishlist-Enhancer?color=green"></a>
+<a href="https://github.com/beerleexc/Steam-Registerkey-Enhancer/releases"><img src="https://img.shields.io/github/v/release/beerleexc/Steam-Registerkey-Enhancer?color=green"></a>
 <a href="https://github.com/beerleexc/Steam-Registerkey-Enhancer/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-orange.svg"></a>
 <a href="https://github.com/beerleexc/Steam-Registerkey-Enhancer/blob/main/README.EN.md"><img src="https://img.shields.io/badge/document-English-red.svg"></a>
 <a href="https://github.com/beerleexc/Steam-Registerkey-Enhancer/blob/main/README.md"><img src="https://img.shields.io/badge/Windows-MacOS-navy.svg"></a>
