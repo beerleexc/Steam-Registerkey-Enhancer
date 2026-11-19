@@ -2,8 +2,8 @@
 // @name         Steam Registerkey Enhancer
 // @namespace    https://github.com/beerleexc/Steam-Registerkey-Enhancer
 // @icon         https://raw.githubusercontent.com/beerleexc/Steam-Registerkey-Enhancer/main/assets/icon.svg
-// @version      1.1.2
-// @description  批量提交 Steam Key，反查每个 Key 对应的 Sub ID 与激活失败的原因。中英双语，按页面/浏览器语言自动切换。
+// @version      1.1.3
+// @description  批量提交 Steam Key，查询cdk对应的 Sub ID 与激活失败的原因。导出激活数据。
 // @author       beerlee
 // @license      MIT
 // @homepageURL  https://github.com/beerleexc/Steam-Registerkey-Enhancer
@@ -53,7 +53,7 @@
     var I18N = {
         zh: {
             title: '输入产品代码，在 Steam 上激活您的产品。',
-            ph: '支持批量激活、文字复制，可自动识别cdk\n默认分批9个、间隔20秒；每小时上限50次\n超限或连续错误10次暂停激活，请30分钟后重试',
+            ph: '支持批量激活、文字复制，可自动识别cdk\n批量激活时默认分批9个、间隔20秒，建议每行一个\n账户每小时可激活为50次，超限或连续错误10次，账户将暂停激活功能，请30分钟后重试',
             start: '开始激活',
             cont: '继续激活',
             stop: '停止',
@@ -584,7 +584,7 @@
         return JSON.stringify(arr, null, 2);
     }
 
-    // 等待中的 Key 就是「未使用」：从未提交激活（status 仍为 wait），导出时状态列标注「等待激活」
+    
     function countStatus() {
         var c = { ok: 0, fail: 0, run: 0, unused: 0 };
         for (var i = 0; i < state.items.length; i++) {
@@ -813,8 +813,7 @@
         return '<span class="srk-sub-name" title="' + esc(it.name) + '">' + esc(it.name) + '</span>';
     }
 
-    // sub 数字：展示芯片，点击在新标签打开 SteamDB 的 sub 详情页
-    // 错误码 24（缺少本体）时 Steam 只回本体包，芯片里的 id 是本体 sub，需标注
+    
     var STEAMDB_ICON = '<svg class="srk-db-ico" viewBox="0 0 24 24" fill="currentColor"' +
         ' aria-hidden="true" focusable="false"><path d="M11.981 0C5.72 0 .581 2.231.02 5.081l6.675 1.257' +
         'c.544-.17 1.162-.244 1.8-.244l3.131-1.875c-.037-.469.244-.956.881-1.35c.9-.581 2.307-.9 3.732-.9' +
@@ -1041,7 +1040,16 @@
         var examples = document.getElementById('registerkey_examples_text');
 
         if (form) {
-            while (form.firstChild) form.removeChild(form.firstChild);
+            // 原生表单内容只隐藏不删除：Augmented Steam 的「激活多个产品」会读取
+            // #product_key 的值，删除该节点会让它的按钮点击时报错、批量激活失效。
+            var native = document.getElementById('srk-native-form');
+            if (!native) {
+                native = document.createElement('div');
+                native.id = 'srk-native-form';
+                native.style.display = 'none';
+                while (form.firstChild) native.appendChild(form.firstChild);
+                form.appendChild(native);
+            }
             root.className = 'srk-root srk-embed';
             form.appendChild(root);
             form.style.display = '';
