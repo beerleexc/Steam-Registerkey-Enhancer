@@ -7,11 +7,11 @@
 </div>
 <div align="center">
 <a href="https://github.com/beerleexc"><img src="https://img.shields.io/badge/Author-beerleexc-blue.svg"></a>
-<a href="https://github.com/beerleexc/Steam-Wishlist-Enhancer/releases"><img src="https://img.shields.io/github/v/release/beerleexc/Steam-Wishlist-Enhancer?color=green"></a>
-<a href="https://github.com/beerleexc/Steam-Wishlist-Enhancer/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-orange.svg"></a>
-<a href="https://github.com/beerleexc/Steam-Wishlist-Enhancer/blob/main/README.EN.md"><img src="https://img.shields.io/badge/document-English-red.svg"></a>
-<a href="https://github.com/beerleexc/Steam-Wishlist-Enhancer/blob/main/README.md"><img src="https://img.shields.io/badge/Windows-MacOS-navy.svg"></a>
-<a href="https://github.com/beerleexc/Steam-Wishlist-Enhancer/blob/main/README.md"><img src="https://img.shields.io/badge/Android-IOS-deeppink.svg"></a>
+<a href="https://github.com/beerleexc/Steam-Registerkey-Enhancer/releases"><img src="https://img.shields.io/github/v/release/beerleexc/Steam-Registerkey-Enhancer?color=green"></a>
+<a href="https://github.com/beerleexc/Steam-Registerkey-Enhancer/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-orange.svg"></a>
+<a href="https://github.com/beerleexc/Steam-Registerkey-Enhancer/blob/main/README.EN.md"><img src="https://img.shields.io/badge/document-English-red.svg"></a>
+<a href="https://github.com/beerleexc/Steam-Registerkey-Enhancer/blob/main/README.md"><img src="https://img.shields.io/badge/Windows-MacOS-navy.svg"></a>
+<a href="https://github.com/beerleexc/Steam-Registerkey-Enhancer/blob/main/README.md"><img src="https://img.shields.io/badge/Android-IOS-deeppink.svg"></a>
 </div>
 
 # ✨ Project Introduction
@@ -58,10 +58,10 @@ According to the Steam Subscriber Agreement, automated script interaction is res
 You are fully responsible for key legitimacy and any account risks.
 ---
 # 🪁 Recommended Projects
-## beerlee: Steam‑Wishlist‑Enhancer
+## beerlee: Steam‑Registerkey‑Enhancer
 Author: [beerlee](https://github.com/beerleexc)
 - [GreasyFork](https://greasyfork.org/zh‑CN/scripts/605431)
-- [GitHub](https://github.com/beerleexc/Steam‑Wishlist‑Enhancer)
+- [GitHub](https://github.com/beerleexc/Steam‑Registerkey‑Enhancer)
 ## marioplus: Steam‑Price‑Converter
 Author: [marioplus](https://github.com/marioplus)
 - [GreasyFork](https://greasyfork.org/zh‑CN/scripts/452504)
@@ -75,8 +75,8 @@ If you like this project please give it a ⭐Star (°∀°)ﾉ
 You may also consider a donation (｀・ω・´)
 
 <p align="center">
-<img src="https://raw.githubusercontent.com/beerleexc/Steam-Wishlist-Enhancer/main/assets/WeChat.JPG" width="48%">
-<img src="https://raw.githubusercontent.com/beerleexc/Steam-Wishlist-Enhancer/main/assets/AliPay.PNG" width="48%">
+<img src="https://raw.githubusercontent.com/beerleexc/Steam-Registerkey-Enhancer/main/assets/WeChat.JPG" width="48%">
+<img src="https://raw.githubusercontent.com/beerleexc/Steam-Registerkey-Enhancer/main/assets/AliPay.PNG" width="48%">
 </p>
 
 Author: **beerlee**  
